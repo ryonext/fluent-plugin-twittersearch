@@ -10,9 +10,12 @@ module Fluent
         config_param :tag, :string
         config_param :keyword, :string,:default => nil
         config_param :hashtag, :string,:default => nil
+        config_param :user_id, :string,:default => nil
         config_param :count,   :integer
         config_param :run_interval,   :integer
         config_param :result_type, :string
+        config_param :media, :bool ,:default => false
+        config_param :latest_id_file, :string,:default => nil
 
         attr_reader :twitter
 
@@ -31,7 +34,8 @@ module Fluent
                                              :oauth_token => @oauth_token,
                                              :oauth_token_secret => @oauth_token_secret
                                             )
-            raise Fluent::ConfigError.new if @keyword.nil? and @hashtag.nil?
+            raise Fluent::ConfigError.new if @keyword.nil? and @hashtag.nil? and @user_id.nil?
+            @latest_id = ((@latest_id_file && File.exists?(@latest_id_file)) ? File.open(@latest_id_file).read : '0').to_i
         end
 
         def start
@@ -40,10 +44,15 @@ module Fluent
         end
 
         def search
+            search_option = {:count => @count, :result_type => @result_type}
             tweets = []
-            @twitter.search(@keyword.nil? ? "##{@hashtag}" : @keyword,
-                                    :count => @count,
-                                    :result_type => @result_type).results.reverse.map do |result|
+            results = if @user_id.nil?
+              res = @twitter.search(@keyword.nil? ? "##{@hashtag}" : @keyword, search_option)
+              res.results
+            else
+              @twitter.user_timeline(@user_id, search_option)
+            end
+            results.reverse_each do |result|
 
                 tweet = Hash.new
                 [:id,:retweet_count,:favorite_count].each do |key|
@@ -56,7 +65,24 @@ module Fluent
                 tweet.store('user_id', result.user[:id])
                 tweet.store('text',result.text.force_encoding('utf-8'))
                 tweet.store('name',result.user.name.force_encoding('utf-8'))
-                tweets << tweet
+                tweet.store('tweet_url', "https://twitter.com/#{tweet['screen_name']}/status/#{tweet['id']}")
+                tweet.store('media_url', '')
+
+                if @media && !result.media.empty?
+                  result.media.each do |m|
+                    begin
+                      media_tweet = tweet.dup
+                      media_tweet.store('media_url', m.media_url)
+                      tweets << media_tweet
+                    rescue
+                      $log.warn "raises exception: #{$!.class}, '#{$!.message}'"
+                      tweets << tweet
+                      break
+                    end
+                  end
+                else
+                  tweets << tweet
+                end
             end
             tweets
         end
@@ -64,7 +90,19 @@ module Fluent
         def run
             loop do
                 search.each do |tweet|
-                    Engine.emit @tag,Engine.now,tweet
+                    if @latest_id_file.nil?
+                      #emit tweet
+                      Engine.emit @tag,Engine.now,tweet
+                      next
+                    end
+
+                    current_id = tweet['id'].to_i
+                    if @latest_id < current_id
+                      #emit newest tweet
+                      Engine.emit @tag,Engine.now,tweet
+                      @latest_id = current_id
+                      write_latest_id_file
+                    end
                 end
                 sleep @run_interval
             end
@@ -72,6 +110,11 @@ module Fluent
 
         def shutdown
             Thread.kill(@thread)
+            write_latest_id_file
+        end
+
+        def write_latest_id_file
+            File.open(@latest_id_file, 'w') {|file| file.print(@latest_id)} if @latest_id_file
         end
     end
 end
