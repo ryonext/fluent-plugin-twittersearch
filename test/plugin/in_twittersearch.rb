@@ -34,6 +34,7 @@ class FileInputTest < Test::Unit::TestCase
               count               1
               run_interval            60
               result_type         recent
+              media               yes
             ]
         end
         d = create_driver %[
@@ -112,4 +113,36 @@ class FileInputTest < Test::Unit::TestCase
              end
         end
     end
-end
+
+      def test_search_media_yes
+        d = create_driver %[
+          consumer_key        T5dTrSxS3oXqBbaoYZERw
+          consumer_secret     Trg3qrO7dUSkKZeGxgjmi3B11JuFhjwhiWIkwWKDe0
+          oauth_token         1960044126-heQQwLkiqoTj7uEJAVy0WDUZEEZDJfQqk7C4JIz
+          oauth_token_secret  r0JZ258nTeYzfJ6PZcpD8Pd1ulgawXFt2fP5J5lzZ8
+          tag                 input.twitter
+          keyword             rakuten
+          hashtag             rakuten
+          count               1
+          run_interval            60
+          result_type         recent
+          media               true
+        ]
+        tweets = d.instance.search
+        tweets.each do |tweet|
+            [:created_at,
+             :id,
+             :user_id,
+             :text,
+             :retweet_count,
+             :favorite_count,
+             :screen_name,
+             :name,
+             :profile_image_url,
+             :profile_image_url_https,
+             :base64_media].each do |key|
+                assert_not_nil tweet[key.to_s]
+             end
+        end
+    end
+  end

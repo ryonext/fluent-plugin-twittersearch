@@ -1,3 +1,6 @@
+require 'open-uri'
+require 'Base64'
+
 module Fluent
     class TwittersearchError < StandardError
     end
@@ -13,6 +16,7 @@ module Fluent
         config_param :count,   :integer
         config_param :run_interval,   :integer
         config_param :result_type, :string
+        config_param :media, :bool ,:default => false
 
         attr_reader :twitter
 
@@ -56,7 +60,23 @@ module Fluent
                 tweet.store('user_id', result.user[:id])
                 tweet.store('text',result.text.force_encoding('utf-8'))
                 tweet.store('name',result.user.name.force_encoding('utf-8'))
-                tweets << tweet
+                tweet.store('base64_media', '')
+
+                if @media && !result.media.empty?
+                  result.media.each do |m|
+                    begin
+                      media_tweet = tweet.dup
+                      media_tweet.store('base64_media', Base64.encode64(open(m.media_url).read))
+                      tweets << media_tweet
+                    rescue
+                      $log.warn "raises exception: #{$!.class}, '#{$!.message}'"
+                      tweets << tweet
+                      break
+                    end
+                  end
+                else
+                  tweets << tweet
+                end
             end
             tweets
         end
