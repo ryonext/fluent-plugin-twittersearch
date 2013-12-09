@@ -29,11 +29,10 @@ module Fluent
             Twitter.configure do |cnf|   
                 cnf.consumer_key    = @consumer_key
                 cnf.consumer_secret = @consumer_secret
+                cnf.oauth_token = @oauth_token
+                cnf.oauth_token_secret = @oauth_token_secret
             end
-            @twitter = Twitter::Client.new(
-                                             :oauth_token => @oauth_token,
-                                             :oauth_token_secret => @oauth_token_secret
-                                            )
+            @twitter = Twitter
             raise Fluent::ConfigError.new if @keyword.nil? and @hashtag.nil? and @user_id.nil?
             @latest_id = ((@latest_id_file && File.exists?(@latest_id_file)) ? File.open(@latest_id_file).read : '0').to_i
         end
