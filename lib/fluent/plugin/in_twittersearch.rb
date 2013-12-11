@@ -31,8 +31,11 @@ module Fluent
                 cnf.consumer_secret = @consumer_secret
                 cnf.oauth_token = @oauth_token
                 cnf.oauth_token_secret = @oauth_token_secret
+                # https://github.com/muffinista/chatterbot/issues/11
+                cnf.connection_options = Twitter::Default::CONNECTION_OPTIONS.merge(
+                  :request => { :open_timeout => 5, :timeout => 10}
+                )
             end
-            @twitter = Twitter
             raise Fluent::ConfigError.new if @keyword.nil? and @hashtag.nil? and @user_id.nil?
             @latest_id = ((@latest_id_file && File.exists?(@latest_id_file)) ? File.open(@latest_id_file).read : '0').to_i
         end
@@ -42,14 +45,19 @@ module Fluent
             @thread = Thread.new(&method(:run))
         end
 
-        def search
+        def search(twitter_client)
             search_option = {:count => @count, :result_type => @result_type}
             tweets = []
-            results = if @user_id.nil?
-              res = @twitter.search(@keyword.nil? ? "##{@hashtag}" : @keyword, search_option)
-              res.results
-            else
-              @twitter.user_timeline(@user_id, search_option)
+            begin
+              results = if @user_id.nil?
+                res = twitter_client.search(@keyword.nil? ? "##{@hashtag}" : @keyword, search_option)
+                res.results
+              else
+                twitter_client.user_timeline(@user_id, search_option)
+              end
+            rescue
+              $log.warn "raises exception: #{$!.class}, '#{$!.message}'"
+              return tweets
             end
             results.reverse_each do |result|
 
@@ -88,7 +96,7 @@ module Fluent
 
         def run
             loop do
-                search.each do |tweet|
+                search(Twitter::Client.new).each do |tweet|
                     if @latest_id_file.nil?
                       #emit tweet
                       Engine.emit @tag,Engine.now,tweet
