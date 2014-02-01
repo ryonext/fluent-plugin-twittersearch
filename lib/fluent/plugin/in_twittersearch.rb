@@ -26,7 +26,7 @@ module Fluent
 
         def configure(config)
             super
-            Twitter.configure do |cnf|   
+            Twitter.configure do |cnf|
                 cnf.consumer_key    = @consumer_key
                 cnf.consumer_secret = @consumer_secret
                 cnf.oauth_token = @oauth_token
@@ -74,6 +74,8 @@ module Fluent
                 tweet.store('name',result.user.name.force_encoding('utf-8'))
                 tweet.store('tweet_url', "https://twitter.com/#{tweet['screen_name']}/status/#{tweet['id']}")
                 tweet.store('media_url', '')
+                original_uri = result.user.attrs[:status][:entities][:urls].first[:expanded_url]
+                tweet.store('original_url', original_uri )
 
                 if @media && !result.media.empty?
                   result.media.each do |m|
